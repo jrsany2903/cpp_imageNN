@@ -37,11 +37,22 @@ void sigmoidInPlace(MatrixXf& mat){
         }
     }
 }
+MatrixXf oneMat(int rows){
+    MatrixXf mat(rows, 1);
+    for (int i = 0; i < rows; ++i) {
+        mat(i, 0) = 1.0f;
+    }
+    return mat;
+}
 
 class NeuralNetwork {
     public:
         vector<MatrixXf> weights;
-        NeuralNetwork(vector<int> shape) {
+        vector<int> shape;
+        float learningRate; // Learning rate for weight updates
+        NeuralNetwork(vector<int> shape, float learningRate = 0.01f) {
+            this->shape = shape;
+            this->learningRate = learningRate;
             for (int i = 0; i < shape.size() - 1; ++i) {
                 MatrixXf weight = MatrixXf::Random(shape[i + 1], shape[i]);
                 weights.push_back(weight);
@@ -55,21 +66,43 @@ class NeuralNetwork {
                 cout << "---------" << endl;
             }
         }
+        void trainOne(const MatrixXf& input, const MatrixXf& expected) {
+            vector<MatrixXf> outputs = this->detQuery(input);
+            MatrixXf output, prev, delta;
+            output = outputs.back(); // Get the last output
+            MatrixXf error = expected - output;
+            for (int i = weights.size() - 1; i >= 0; --i) {
+                //delta = lr * e * output * (1 - output) * input^T
+                output = outputs[i + 1]; // Get the output of the current layer
+                prev = outputs[i]; // Get the input of the current layer
+                delta = this->learningRate * (error.cwiseProduct(output).cwiseProduct(oneMat(output.rows()) - output)) * prev.transpose();// Code Breaks here
+                weights[i] += delta; // Update weights
+                error = weights[i].transpose() * error; // Backpropagation error
+            }
+        }
+
+        void train(vector<MatrixXf> data, vector<MatrixXf> Expected){
+            for(int i = 0; i < data.size(); i++){
+                MatrixXf input = data[i];
+                MatrixXf expected = Expected[i];
+                this->trainOne(input, expected);
+            }
+        }
+
+        vector<MatrixXf> detQuery(const MatrixXf& input) {
+            vector<MatrixXf> outputs;
+            MatrixXf output = input;
+            outputs.push_back(output);
+            for (int i = 0; i < weights.size(); ++i) {
+                output = (weights[i] * output);
+                output = sigmoid(output); 
+                outputs.push_back(output);
+            }
+            return outputs;
+        }
 
         MatrixXf query(const MatrixXf& input) {
-            MatrixXf output = input;
-            for (int i = 0; i < weights.size(); ++i) {
-                printMatrix(weights[i]);
-                cout << "---------" << endl;
-                printMatrix(output);
-                cout << "---------" << endl;
-                output = (weights[i] * output);
-                //sigmoidInPlace(output);
-                output = sigmoid(output); // Uncomment this line if you want to use the non-in-place version
-            }
-            cout << "Output: " << endl;
-            printMatrix(output);
-            return output;
+            return this->detQuery(input).back(); // Get the last output
         }
 
 
@@ -78,10 +111,17 @@ class NeuralNetwork {
 int main() {
     Matrix <float, 3, 3> mat;
     Matrix <float, 3, 1> i;
-    NeuralNetwork nn({3, 3 , 1});
+    NeuralNetwork nn({784, 28 , 28, 10});
+    
     nn.printWeights();
+    printMatrix(nn.query(i));
     i << 0.5, 0.5, 0.5;
-    nn.query(i);
+    for (int k = 0; k < 2000; ++k) {
+        nn.trainOne(i, oneMat(3));
+    }
+
+    nn.printWeights();
+    printMatrix(nn.query(i));
     //TODO add training function
     //TODO get training from MNIST dataset
     cout << "Hello World!" << endl;
