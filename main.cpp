@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <Eigen/Dense>
+#include <fstream>
 
 
 using namespace std;
@@ -108,22 +109,85 @@ class NeuralNetwork {
 
 };
 
-int main() {
-    Matrix <float, 3, 3> mat;
-    Matrix <float, 3, 1> i;
+int getIndexOfMax(MatrixXf& mat) {
+    int index = 0;
+    float maxVal = mat(0, 0);
+    for (int i = 1; i < mat.rows(); ++i) {
+        if (mat(i, 0) > maxVal) {
+            maxVal = mat(i, 0);
+            index = i;
+        }
+    }
+    return index;
+}
+
+int main(int argc , char* argv[]) {
+
     NeuralNetwork nn({784, 28 , 28, 10});
-    
-    nn.printWeights();
-    printMatrix(nn.query(i));
-    i << 0.5, 0.5, 0.5;
-    for (int k = 0; k < 2000; ++k) {
-        nn.trainOne(i, oneMat(3));
+
+    ifstream trainingdata("Original Dataset/train-images.idx3-ubyte", ios::binary);
+    ifstream traininglabels("Original Dataset/train-labels.idx1-ubyte", ios::binary);
+    trainingdata.seekg(16, ios::beg);
+    traininglabels.seekg(8, ios::beg);
+
+    unsigned char data[784];
+    unsigned char label[1];
+    Matrix <float, 784, 1> image; 
+    Matrix <float, 10, 1> labelmat;
+
+    for (int dataset = 0; dataset < 60000; ++dataset) {
+        image.setZero();
+        labelmat.setZero();
+        trainingdata.read((char*)data, 784);
+        traininglabels.read((char*)label, 1);   
+        for (int i = 0; i < 784; ++i) {
+            image(i, 0) = (((float)((int)data[i]) / 255.0f) * 0.99f) + 0.01f; // Normalize to [0.01, 0.99]
+        }
+        nn.learningRate = max(0.05f * (dataset / 60000.0f), 0.01f); // Decrease learning rate over time
+        labelmat((int)label[0], 0) = 0.99f; // Set the label to 0.99 for the correct class
+        nn.trainOne(image, labelmat); 
+        cout << "finished training on image " << dataset << endl;
+    }
+    cout << "Finished training on 60000 images" << endl;
+    trainingdata.close();
+    traininglabels.close();
+
+    //TODO add testing data
+    //TODO add saving and loading nn from bin files
+    //TODO create trial for different learning rates and NN shapes
+
+
+    //Testing
+    ifstream testingdata("Original Dataset/t10k-images.idx3-ubyte", ios::binary);
+    ifstream testinglabels("Original Dataset/t10k-labels.idx1-ubyte", ios::binary);
+    testingdata.seekg(16, ios::beg);
+    testinglabels.seekg(8, ios::beg);
+    int count = 0;
+
+    MatrixXf output;
+
+    for (int dataset = 0; dataset < 10000; ++dataset) {
+        image.setZero();
+        labelmat.setZero();
+        testingdata.read((char*)data, 784);
+        testinglabels.read((char*)label, 1);   
+        for (int i = 0; i < 784; ++i) {
+            image(i, 0) = (((float)((int)data[i]) / 255.0f) * 0.99f) + 0.01f; // Normalize to [0.01, 0.99]
+        }
+        labelmat((int)label[0], 0) = 0.99f; // Set the label to 0.99 for the correct class
+        cout << "Testing on image " << dataset << endl;
+        output = nn.query(image); // Get the output of the neural network
+        if (getIndexOfMax(output) == (int)label[0]) { 
+            count++;
+        }
     }
 
-    nn.printWeights();
-    printMatrix(nn.query(i));
-    //TODO add training function
-    //TODO get training from MNIST dataset
-    cout << "Hello World!" << endl;
+    testingdata.close();
+    testinglabels.close();
+    cout << "Finished testing on 10000 images" << endl;
+    cout << count << " images were classified correctly" << endl;
+
+
+    cout << "Program Terminated..." << endl;
     return 0;
 }
